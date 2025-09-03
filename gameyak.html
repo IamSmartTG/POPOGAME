@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>เกมแยกตัวประกอบพหุนามดีกรี 2</title>
+  <style>
+    :root{
+      --bg1:#F0E2C3; --bg2:#DCECE9; --card:#F2EAE0;
+      --accent:#F6C7B3; --accent2:#82B2C0; --accent3:#C3DEDD;
+      --text:#1f2937; --muted:#6b7280;
+      --good:#16a34a; --bad:#dc2626;
+      --shadow:0 8px 16px rgba(0,0,0,.12);
+      --radius:16px;
+    }
+    body{
+      margin:0; font-family:'Noto Sans Thai', sans-serif;
+      color:var(--text);
+      background: linear-gradient(135deg,var(--bg1),var(--bg2));
+      display:grid; place-items:center; min-height:100vh; padding:20px;
+    }
+    .card{background:var(--card); border-radius:var(--radius); padding:28px; box-shadow:var(--shadow); border:2px solid var(--accent2)}
+    h1{text-align:center; color:var(--accent2); margin:0 0 6px}
+    .sub{text-align:center; color:var(--muted); margin-bottom:16px}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px}
+    .field{flex:1; min-width:160px; display:flex; flex-direction:column; gap:6px}
+    label{font-size:14px; color:var(--muted)}
+    input{padding:10px; border:2px solid var(--accent3); border-radius:10px; font-size:15px}
+    .btn{border:none; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer}
+    .btn-primary{background:var(--accent); color:#fff}
+    .btn-primary:hover{opacity:.9}
+    .btn-ghost{background:var(--accent3); color:var(--text)}
+    .btn-ghost:hover{background:var(--accent2); color:#fff}
+    .pill{background:var(--accent3); border-radius:999px; padding:6px 12px; font-size:13px}
+    .hud{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px}
+    .poly{font-size:20px; font-weight:700}
+    .eq{padding:6px 10px; border:2px dashed var(--accent2); border-radius:8px; background:#fff}
+    .answers{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin:12px 0}
+    .status{min-height:20px; font-size:14px}
+    .status.ok{color:var(--good)}
+    .status.no{color:var(--bad)}
+    .results{display:none; margin-top:14px}
+    .results.show{display:block}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="card">
+      <h1>เกมแยกตัวประกอบพหุนามดีกรี 2</h1>
+      <div class="sub">ตอบค่าในวงเล็บ เช่น (x+p)(x+q) ภายใน 2 นาที</div>
+
+      <div id="setup" class="row">
+        <div class="field">
+          <label for="player">ชื่อผู้เล่น</label>
+          <input id="player" type="text" placeholder="พิมพ์ชื่อก่อนเริ่ม" />
+        </div>
+        <button id="start" class="btn btn-primary">เริ่มเกม</button>
+        <button id="how" class="btn btn-ghost">วิธีเล่น</button>
+      </div>
+
+      <div class="hud">
+        <div class="pill">ผู้เล่น: <b id="hudName">—</b></div>
+        <div class="pill">เวลา: <b id="hudTime">02:00</b></div>
+        <div class="pill">คะแนน: <b id="hudScore">0</b></div>
+      </div>
+
+      <div id="quiz">
+        <div class="poly">แยกตัวประกอบ <span class="eq" id="poly"></span></div>
+        <div class="answers">
+          <div class="field">
+            <label>ตัวประกอบที่ 1 (ค่าในวงเล็บของ x)</label>
+            <input id="r1" type="number" />
+          </div>
+          <div class="field">
+            <label>ตัวประกอบที่ 2 (ค่าในวงเล็บของ x)</label>
+            <input id="r2" type="number" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="submit" class="btn btn-primary">ตรวจคำตอบ</button>
+          <button id="skip" class="btn btn-ghost">ข้าม</button>
+          <button id="showAns" class="btn btn-ghost">เฉลย</button>
+          <div id="status" class="status"></div>
+        </div>
+      </div>
+
+      <div id="results" class="results">
+        <h2>สรุปผล</h2>
+        <p id="summary"></p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $=id=>document.getElementById(id);
+    const fmt=t=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+
+    function polyText(b,c){
+      let out="x²";
+      if(b!==0) out += (b>0?" + ":" - ")+(Math.abs(b)===1?"x":Math.abs(b)+"x");
+      if(c!==0) out += (c>0?" + ":" - ")+Math.abs(c);
+      return out;
+    }
+
+    function genQuestion(){
+      const pick=()=>Math.floor(Math.random()*19)-9;
+      let r1=pick(), r2=pick(); if(r1===0&&r2===0) r2=1;
+      return {r1,r2,b:-(r1+r2),c:r1*r2,text:polyText(-(r1+r2),r1*r2)};
+    }
+
+    const DURATION=120;
+    let state={};
+
+    function setRunning(on){["submit","skip","showAns","r1","r2"].forEach(id=>$(id).disabled=!on)}
+
+    function showQuestion(){
+      state.q=genQuestion();
+      $("poly").textContent=state.q.text;
+      $("r1").value=''; $("r2").value='';
+      $("status").textContent='';
+    }
+
+    function updateHud(){
+      $("hudName").textContent=state.name;
+      $("hudTime").textContent=fmt(state.time);
+      $("hudScore").textContent=state.score;
+    }
+
+    function startTimer(){
+      if(state.timer) clearInterval(state.timer);
+      state.timer=setInterval(()=>{state.time--; updateHud(); if(state.time<=0) endGame();},1000);
+    }
+
+    function startGame(){
+      const name=$("player").value.trim(); if(!name){alert('กรุณาใส่ชื่อ');return;}
+      state={name,time:DURATION,score:0,total:0,correct:0};
+      updateHud(); setRunning(true); showQuestion(); startTimer();
+      $("results").classList.remove('show');
+    }
+
+    function checkAnswer(){
+      const a=Number($("r1").value), b=Number($("r2").value);
+      const p=-state.q.r1, q=-state.q.r2;
+      const ok=(a===p&&b===q)||(a===q&&b===p);
+      state.total++;
+      if(ok){state.correct++; state.score+=10; $("status").textContent=`ถูกต้อง! (x${p>=0?'+':''}${p})(x${q>=0?'+':''}${q})`; $("status").className='status ok'}
+      else{$("status").textContent=`ผิด เฉลย: (x${p>=0?'+':''}${p})(x${q>=0?'+':''}${q})`; $("status").className='status no'}
+      updateHud(); showQuestion();
+    }
+
+    function skipQuestion(){
+      state.total++; state.score=Math.max(0,state.score-2);
+      const p=-state.q.r1, q=-state.q.r2;
+      $("status").textContent=`ข้าม เฉลย: (x${p>=0?'+':''}${p})(x${q>=0?'+':''}${q})`;
+      updateHud(); showQuestion();
+    }
+
+    function showAnswer(){
+      const p=-state.q.r1, q=-state.q.r2;
+      $("status").textContent=`เฉลย: (x${p>=0?'+':''}${p})(x${q>=0?'+':''}${q})`;
+    }
+
+    function endGame(){
+      clearInterval(state.timer); setRunning(false); state.time=0; updateHud();
+      $("summary").textContent=`${state.name} ได้ ${state.score} คะแนน จาก ${state.total} ข้อ`; $("results").classList.add('show');
+    }
+
+    $("start").addEventListener('click', startGame);
+    $("submit").addEventListener('click', checkAnswer);
+    $("skip").addEventListener('click', skipQuestion);
+    $("showAns").addEventListener('click', showAnswer);
+    $("how").addEventListener('click',()=>{
+      alert('วิธีเล่น: ใส่ชื่อแล้วกดเริ่ม ระบบจะสุ่มพหุนาม x²+bx+c ที่แยกเป็น (x+p)(x+q). ให้ตอบ p และ q (ค่าในวงเล็บ). เช่น x²+2x+1=(x+1)(x+1) ตอบ 1 และ 1. มีเวลา 2 นาที, ถูก +10, ข้าม -2');
+    });
+  </script>
+</body>
+</html>
